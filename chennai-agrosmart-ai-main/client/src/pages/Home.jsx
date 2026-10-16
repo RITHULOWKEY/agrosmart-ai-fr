@@ -80,11 +80,13 @@ const Home = () => {
               <div className="relative mx-auto max-w-md lg:max-w-none">
                 {/* Central Crop Visual Container */}
                 <div className="relative rounded-3xl overflow-hidden border border-agro-200/80 shadow-elevated bg-white p-3">
+
                   <img
-                    src="https://images.unsplash.com/photo-1592417817098-8f3d691060c4?auto=format&fit=crop&w=800&q=80"
-                    alt="Healthy Agricultural Crop in Chennai"
+                    src="/images/tomato-farm.jpg"
+                    alt="Healthy agricultural crops in Chennai"
                     className="w-full h-80 sm:h-96 object-cover rounded-2xl"
                   />
+
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent rounded-3xl pointer-events-none" />
                   <div className="absolute bottom-6 left-6 right-6 text-white pointer-events-none">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-limeacc-400">Field Scout</span>
