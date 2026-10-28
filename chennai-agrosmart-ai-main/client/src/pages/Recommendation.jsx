@@ -80,10 +80,18 @@ const Recommendation = () => {
   }
 
   const { analysis, agents = {}, recommendation } = report;
-  const backendBase = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
-  const fullImageUrl = analysis?.imageUrl?.startsWith('http')
-    ? analysis.imageUrl
-    : `${backendBase}${analysis?.imageUrl}`;
+  const getBackendBase = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    if (apiUrl && typeof apiUrl === 'string' && apiUrl.trim() !== '') {
+      return apiUrl.trim().replace(/\/api\/?$/, '').replace(/\/+$/, '');
+    }
+    return import.meta.env.PROD ? '' : 'http://localhost:5000';
+  };
+  const backendBase = getBackendBase();
+  const rawImageUrl = analysis?.imageUrl || '';
+  const fullImageUrl = rawImageUrl.startsWith('http') || rawImageUrl.startsWith('data:')
+    ? rawImageUrl
+    : `${backendBase}${rawImageUrl.startsWith('/') ? '' : '/'}${rawImageUrl}`;
 
   return (
     <AppLayout>

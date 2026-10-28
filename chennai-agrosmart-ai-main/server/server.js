@@ -4,43 +4,48 @@ const app = require('./app');
 const connectDB = require('./config/db');
 
 const PORT = process.env.PORT || 5000;
+const HOST = process.env.HOST || '0.0.0.0';
 
 const startServer = async () => {
   console.log('====================================================');
   console.log('🌱 Starting Chennai AgroSmart AI Server...');
   console.log('====================================================');
 
+  // 1. Start Express HTTP Server immediately so port and health check are responsive
+  const server = http.createServer(app);
+
+  server.listen(PORT, HOST, () => {
+    console.log('====================================================');
+    console.log(`🚀 Chennai AgroSmart AI Backend running on port ${PORT} (${HOST})`);
+    console.log(`📡 Health Check: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}/api/health`);
+    console.log(`🌐 Allowed Client URL: ${process.env.CLIENT_URL || 'https://agrosmart-ai-fr.vercel.app'}`);
+    console.log(`🤖 4 AI Agents: Crop, Weather, Soil, Market active`);
+    console.log('====================================================');
+  });
+
+  // 2. Connect to MongoDB database
   try {
-    // 1. Connect to MongoDB and verify connection
     await connectDB();
-
-    // 2. Start Express HTTP Server
-    const server = http.createServer(app);
-
-    server.listen(PORT, () => {
-      console.log('====================================================');
-      console.log(`🚀 Chennai AgroSmart AI Backend running on port ${PORT}`);
-      console.log(`📡 Health Check: http://localhost:${PORT}/api/health`);
-      console.log(`🌐 Allowed Client URL: ${process.env.CLIENT_URL || 'http://localhost:5173'}`);
-      console.log(`🤖 4 AI Agents: Crop, Weather, Soil, Market active`);
-      console.log('====================================================');
-    });
-
-    // Handle process termination gracefully
-    process.on('SIGTERM', () => {
-      console.log('SIGTERM signal received. Closing HTTP server...');
-      server.close(() => {
-        console.log('HTTP server closed.');
-      });
-    });
   } catch (error) {
     console.error('====================================================');
-    console.error('💥 SERVER STARTUP ABORTED: MongoDB Connection Failed');
+    console.error('⚠️ Initial MongoDB Connection Notice:');
     console.error(error.message);
-    console.error('Please configure your existing MongoDB database connection in server/.env');
+    console.error('👉 The server remains active to serve health checks and requests.');
+    console.error('👉 In MongoDB Atlas, ensure your IP address is added to Network Access.');
     console.error('====================================================');
-    process.exit(1);
   }
+
+  // Handle process termination gracefully
+  const shutdown = () => {
+    console.log('Shutdown signal received. Closing HTTP server...');
+    server.close(() => {
+      console.log('HTTP server closed.');
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 };
 
 startServer();

@@ -1,6 +1,19 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const resolveApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim() !== '') {
+    return envUrl.trim().replace(/\/+$/, '');
+  }
+  // In production, default to same-origin relative /api
+  if (import.meta.env.PROD) {
+    return '/api';
+  }
+  // In local development, default to local backend
+  return 'http://localhost:5000/api';
+};
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -47,17 +60,6 @@ export const farmApi = {
   createFarm: (data) => api.post('/farms', data),
   getFarmById: (id) => api.get(`/farms/${id}`),
   updateFarm: (id, data) => api.put(`/farms/${id}`, data),
-  saveBoundary: (id, data) => api.put(`/farms/${id}/boundary`, data),
-  deleteBoundary: (id) => api.delete(`/farms/${id}/boundary`),
-};
-
-// Agents & Weather Intelligence endpoints
-export const agentApi = {
-  getWeather: (data) => api.post('/agents/weather', data),
-  getFarmWeather: (farmId) => api.get(`/agents/weather/farm/${farmId}`),
-  getCrop: (data) => api.post('/agents/crop', data),
-  getSoil: (data) => api.post('/agents/soil', data),
-  getMarket: (data) => api.post('/agents/market', data),
 };
 
 // Crop Analysis & Multi-Agent Pipeline endpoints

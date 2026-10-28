@@ -41,7 +41,14 @@ const History = () => {
     fetchHistory();
   }, []);
 
-  const backendBase = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+  const getBackendBase = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    if (apiUrl && typeof apiUrl === 'string' && apiUrl.trim() !== '') {
+      return apiUrl.trim().replace(/\/api\/?$/, '').replace(/\/+$/, '');
+    }
+    return import.meta.env.PROD ? '' : 'http://localhost:5000';
+  };
+  const backendBase = getBackendBase();
 
   return (
     <AppLayout>
@@ -108,9 +115,10 @@ const History = () => {
               const soilAgent = item.agents?.soil?.result;
               const marketAgent = item.agents?.market?.result;
 
-              const imageUrl = item.imageUrl?.startsWith('http')
-                ? item.imageUrl
-                : `${backendBase}${item.imageUrl}`;
+              const rawImg = item.imageUrl || '';
+              const imageUrl = rawImg.startsWith('http') || rawImg.startsWith('data:')
+                ? rawImg
+                : `${backendBase}${rawImg.startsWith('/') ? '' : '/'}${rawImg}`;
 
               return (
                 <div

@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "buildCommand": "cd chennai-agrosmart-ai-main && npm run build --prefix client",
+  "outputDirectory": "chennai-agrosmart-ai-main/client/dist",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/chennai-agrosmart-ai-main/api/index.js" },
+    { "source": "/uploads/(.*)", "destination": "/chennai-agrosmart-ai-main/api/index.js" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "chennai-agrosmart-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chennai AgroSmart AI - Full Stack Agricultural Intelligence Decision Platform",
+  "scripts": {
+    "dev:client": "npm run dev --prefix client",
+    "dev:server": "npm run dev --prefix server",
+    "dev": "npm run dev --prefix client",
+    "build:client": "npm run build --prefix client",
+    "build": "npm run build:client",
+    "start": "node server/server.js",
+    "test-db": "node server/test-db.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-validator": "^7.2.1",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.5",
+    "multer": "^1.4.5-lts.1"
+  }
+}
