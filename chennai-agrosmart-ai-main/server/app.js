@@ -64,27 +64,10 @@ const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTI
 const uploadDir = isServerless ? path.join(os.tmpdir(), 'uploads') : path.join(__dirname, 'uploads');
 app.use('/uploads', express.static(uploadDir));
 
-// Database auto-connection guard
-app.use(async (req, res, next) => {
-  // Let health check and preflight pass without blocking on DB
-  if (
-    req.method === 'OPTIONS' ||
-    req.path === '/api/health' ||
-    req.path === '/health' ||
-    req.path.startsWith('/uploads')
-  ) {
-    return next();
-  }
-
-  if (mongoose.connection.readyState !== 1) {
-    try {
-      await connectDB();
-    } catch (err) {
-      return res.status(503).json({
-        success: false,
-        message: 'Database connection is temporarily unavailable. Please verify MongoDB Atlas Network Access and credentials.',
-      });
-    }
+// Ensure DB connection is initiated in background if disconnected
+app.use((req, res, next) => {
+  if (mongoose.connection.readyState !== 1 && process.env.MONGODB_URI) {
+    connectDB().catch(() => {});
   }
   next();
 });
