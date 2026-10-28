@@ -88,8 +88,6 @@ const updateFarm = async (req, res) => {
     if (farmSize !== undefined) farm.farmSize = Number(farmSize);
     if (primaryCrop) farm.primaryCrop = primaryCrop;
     if (irrigationType) farm.irrigationType = irrigationType;
-    if (req.body.boundary !== undefined) farm.boundary = req.body.boundary;
-    if (req.body.gisData !== undefined) farm.gisData = req.body.gisData;
 
     await farm.save();
 
@@ -103,17 +101,67 @@ const updateFarm = async (req, res) => {
   }
 };
 
+// Spherical polygon area (in square meters)
+function computePolygonArea(coords) {
+  const R = 6378137;
+  let area = 0;
+  for (let i = 0; i < coords.length; i++) {
+    const p1 = coords[i];
+    const p2 = coords[(i + 1) % coords.length];
+    const dLng = ((p2[0] - p1[0]) * Math.PI) / 180;
+    const lat1 = (p1[1] * Math.PI) / 180;
+    const lat2 = (p2[1] * Math.PI) / 180;
+    area += dLng * (2 + Math.sin(lat1) + Math.sin(lat2));
+  }
+  return Math.round(Math.abs((area * R * R) / 4));
+}
+
+// Perimeter (in meters)
+function computePerimeter(coords) {
+  const R = 6378137;
+  let total = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const [lon1, lat1] = coords[i];
+    const [lon2, lat2] = coords[i + 1];
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    total += R * c;
+  }
+  return Math.round(total);
+}
+
+// Check line segment intersection for bowtie detection
+function linesIntersect(p1, p2, p3, p4) {
+  function ccw(A, B, C) {
+    return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0]);
+  }
+  return ccw(p1, p3, p4) !== ccw(p2, p3, p4) && ccw(p1, p2, p3) !== ccw(p1, p2, p4);
+}
+
+function hasSelfIntersections(ring) {
+  const n = ring.length - 1;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue;
+      if (linesIntersect(ring[i], ring[i + 1], ring[j], ring[j + 1])) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * Helper to validate polygon coordinates and compute GIS measurements
  */
 const validateAndMeasureBoundary = (coordinates) => {
-  let turf;
-  try {
-    turf = require('@turf/turf');
-  } catch (err) {
-    console.warn('Turf.js not available on server, falling back to basic validation.');
-  }
-
   if (!coordinates || !Array.isArray(coordinates) || coordinates.length === 0) {
     return { isValid: false, error: 'Coordinates array is required.' };
   }
@@ -151,90 +199,70 @@ const validateAndMeasureBoundary = (coordinates) => {
     closedRing.push([first[0], first[1]]);
   }
 
-  const geoJsonCoords = [closedRing];
-
-  // If turf is available, run advanced geometric validation & precision measurement
-  if (turf) {
-    try {
-      const poly = turf.polygon(geoJsonCoords);
-
-      // Check self-intersections (kinks)
-      const kinks = turf.kinks(poly);
-      if (kinks && kinks.features && kinks.features.length > 0) {
-        return {
-          isValid: false,
-          error: 'Boundary polygon has self-intersecting edges (bowtie). Farm perimeter lines must not cross each other.',
-        };
-      }
-
-      const areaSqMeters = Math.round(turf.area(poly));
-      if (areaSqMeters <= 0) {
-        return { isValid: false, error: 'Calculated farm area is zero or negative. Please draw a valid boundary.' };
-      }
-
-      const areaAcres = +(areaSqMeters * 0.000247105).toFixed(3);
-      const areaHectares = +(areaSqMeters * 0.0001).toFixed(3);
-
-      const line = turf.polygonToLine(poly);
-      const perimeterMeters = Math.round(turf.length(line, { units: 'kilometers' }) * 1000);
-
-      const centroid = turf.centroid(poly);
-      const center = {
-        lng: +centroid.geometry.coordinates[0].toFixed(6),
-        lat: +centroid.geometry.coordinates[1].toFixed(6),
-      };
-
-      return {
-        isValid: true,
-        geoJsonCoords,
-        measurements: {
-          areaSqMeters,
-          areaAcres,
-          areaHectares,
-          perimeterMeters,
-          center,
-        },
-      };
-    } catch (err) {
-      return { isValid: false, error: `Geospatial geometry error: ${err.message}` };
-    }
+  if (hasSelfIntersections(closedRing)) {
+    return {
+      isValid: false,
+      error: 'Boundary polygon has self-intersecting edges (bowtie). Farm perimeter lines must not cross each other.',
+    };
   }
 
-  // Basic fallback calculation
+  const areaSqMeters = computePolygonArea(closedRing);
+  if (areaSqMeters <= 0) {
+    return { isValid: false, error: 'Calculated farm area is zero or negative. Please draw a valid boundary.' };
+  }
+
+  const areaAcres = +(areaSqMeters * 0.000247105).toFixed(3);
+  const areaHectares = +(areaSqMeters * 0.0001).toFixed(3);
+  const perimeterMeters = computePerimeter(closedRing);
+
+  // Centroid
+  let sumLng = 0;
+  let sumLat = 0;
+  for (let i = 0; i < ring.length; i++) {
+    sumLng += ring[i][0];
+    sumLat += ring[i][1];
+  }
+  const center = {
+    lng: +(sumLng / ring.length).toFixed(6),
+    lat: +(sumLat / ring.length).toFixed(6),
+  };
+
+  const geoJsonCoords = [closedRing];
+
   return {
     isValid: true,
     geoJsonCoords,
     measurements: {
-      areaSqMeters: 0,
-      areaAcres: 0,
-      areaHectares: 0,
-      perimeterMeters: 0,
-      center: { lng: ring[0][0], lat: ring[0][1] },
+      areaSqMeters,
+      areaAcres,
+      areaHectares,
+      perimeterMeters,
+      center,
     },
   };
 };
 
+
 /**
- * @route   PUT /api/farms/:id/boundary
- * @desc    Save/update GIS polygon boundary and measurements for a farm
+ * @route   POST /api/farms/:id/boundary
+ * @desc    Save GIS boundary polygon and turf measurements
  * @access  Private
  */
-const saveFarmBoundary = async (req, res) => {
+const saveBoundary = async (req, res) => {
   try {
     const farm = await Farm.findOne({ _id: req.params.id, userId: req.user._id });
     if (!farm) {
       return res.status(404).json({ success: false, message: 'Farm not found or access denied.' });
     }
 
-    const { coordinates, notes, syncFarmSize = true } = req.body;
-
+    const { coordinates, notes, syncFarmSize = true, measurements } = req.body;
     const validation = validateAndMeasureBoundary(coordinates);
     if (!validation.isValid) {
-      return res.status(400).json({
-        success: false,
-        message: validation.error || 'Invalid farm polygon coordinates.',
-      });
+      return res.status(400).json({ success: false, message: validation.error || 'Valid polygon coordinates required.' });
     }
+
+    const finalMeasurements = measurements || validation.measurements;
+    const areaAcres = finalMeasurements?.areaAcres || farm.farmSize || 2.5;
 
     farm.boundary = {
       type: 'Polygon',
@@ -242,35 +270,41 @@ const saveFarmBoundary = async (req, res) => {
     };
 
     farm.gisData = {
-      ...validation.measurements,
-      notes: notes || farm.gisData?.notes || '',
-      lastSurveyedAt: new Date(),
+      type: 'Polygon',
+      coordinates,
+      areaSqMeters: finalMeasurements?.areaSqMeters || 0,
+      areaAcres,
+      areaHectares: finalMeasurements?.areaHectares || 0,
+      perimeterMeters: finalMeasurements?.perimeterMeters || 0,
+      vertexCount: coordinates.length,
+      center: finalMeasurements?.center || undefined,
+      notes: notes || '',
+      updatedAt: new Date(),
     };
 
-    // Optionally sync the farm's recorded size in acres with GIS measurement
-    if (syncFarmSize && validation.measurements.areaAcres > 0) {
-      farm.farmSize = validation.measurements.areaAcres;
+    if (syncFarmSize && areaAcres > 0) {
+      farm.farmSize = Number(areaAcres.toFixed(2));
     }
 
     await farm.save();
 
     return res.json({
       success: true,
-      message: 'Farm GIS boundary and land measurements saved successfully.',
+      message: 'Farm GIS boundary saved successfully.',
       farm,
     });
   } catch (error) {
-    console.error('Save farm boundary error:', error);
+    console.error('Save boundary error:', error);
     return res.status(500).json({ success: false, message: 'Server error saving farm boundary.' });
   }
 };
 
 /**
  * @route   DELETE /api/farms/:id/boundary
- * @desc    Delete/clear GIS polygon boundary for a farm
+ * @desc    Delete/Clear GIS boundary polygon
  * @access  Private
  */
-const deleteFarmBoundary = async (req, res) => {
+const deleteBoundary = async (req, res) => {
   try {
     const farm = await Farm.findOne({ _id: req.params.id, userId: req.user._id });
     if (!farm) {
@@ -278,24 +312,43 @@ const deleteFarmBoundary = async (req, res) => {
     }
 
     farm.boundary = undefined;
-    farm.gisData = {
-      areaSqMeters: 0,
-      areaAcres: 0,
-      areaHectares: 0,
-      perimeterMeters: 0,
-      notes: '',
-      lastSurveyedAt: null,
-    };
-
+    farm.gisData = undefined;
     await farm.save();
 
     return res.json({
       success: true,
-      message: 'Farm GIS boundary cleared successfully.',
+      message: 'Farm boundary deleted successfully.',
       farm,
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Server error deleting farm boundary.' });
+  }
+};
+
+/**
+ * @route   GET /api/farms/:id/weather
+ * @desc    Fetch weather advisory specifically tailored to this farm
+ * @access  Private
+ */
+const getFarmWeather = async (req, res) => {
+  try {
+    const weatherAgent = require('../services/weatherAgent');
+    const farm = await Farm.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!farm) {
+      return res.status(404).json({ success: false, message: 'Farm not found or access denied.' });
+    }
+
+    const location = farm.location || req.user?.location || 'Chennai, Tamil Nadu';
+    const cropType = farm.primaryCrop || req.user?.defaultCrop || 'Tomato';
+
+    const result = await weatherAgent.run({ location, cropType, farm });
+    return res.json({
+      success: true,
+      farm,
+      ...result,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error retrieving farm weather.' });
   }
 };
 
@@ -304,7 +357,12 @@ module.exports = {
   getFarms,
   getFarmById,
   updateFarm,
-  saveFarmBoundary,
-  deleteFarmBoundary,
+  saveBoundary,
+  saveFarmBoundary: saveBoundary,
+  deleteBoundary,
+  deleteFarmBoundary: deleteBoundary,
+  getFarmWeather,
   validateAndMeasureBoundary,
 };
+
+

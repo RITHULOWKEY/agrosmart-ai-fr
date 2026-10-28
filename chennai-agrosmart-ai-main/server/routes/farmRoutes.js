@@ -4,8 +4,9 @@ const {
   getFarms,
   getFarmById,
   updateFarm,
-  saveFarmBoundary,
-  deleteFarmBoundary,
+  saveBoundary,
+  deleteBoundary,
+  getFarmWeather,
 } = require('../controllers/farmController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -22,8 +23,11 @@ router.route('/:id')
   .put(updateFarm);
 
 router.route('/:id/boundary')
-  .put(saveFarmBoundary)
-  .delete(deleteFarmBoundary);
+  .post(saveBoundary)
+  .delete(deleteBoundary);
+
+router.route('/:id/weather')
+  .get(getFarmWeather);
 
 module.exports = router;
 

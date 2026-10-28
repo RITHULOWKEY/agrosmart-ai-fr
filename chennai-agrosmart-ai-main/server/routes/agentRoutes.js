@@ -20,54 +20,41 @@ router.post('/crop', async (req, res) => {
 
 router.post('/weather', async (req, res) => {
   try {
-    const result = await weatherAgent.run(req.body);
-    return res.json({ success: true, ...result });
+    let farm = null;
+    let location = req.body.location || req.user?.location || 'Chennai, Tamil Nadu';
+    let cropType = req.body.cropType || req.user?.defaultCrop || 'Tomato';
+
+    if (req.body.farmId) {
+      const Farm = require('../models/Farm');
+      farm = await Farm.findOne({ _id: req.body.farmId, userId: req.user._id });
+      if (farm) {
+        location = farm.location || location;
+        cropType = farm.primaryCrop || cropType;
+      }
+    }
+
+    const result = await weatherAgent.run({ ...req.body, location, cropType, farm });
+    return res.json({ success: true, farm, ...result });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// Feature 2: Get weather & farming recommendations for a specific farm
-router.get('/weather/farm/:farmId', async (req, res) => {
+// Farm-specific weather advisory endpoint
+router.get(['/weather/farm/:farmId', '/farm/:farmId'], async (req, res) => {
   try {
     const Farm = require('../models/Farm');
     const farm = await Farm.findOne({ _id: req.params.farmId, userId: req.user._id });
-    if (!farm) {
-      return res.status(404).json({ success: false, message: 'Farm not found or access denied.' });
-    }
+    const location = farm?.location || req.user?.location || 'Chennai, Tamil Nadu';
+    const cropType = farm?.primaryCrop || req.user?.defaultCrop || 'Tomato';
 
-    const lat = farm.gisData?.center?.lat;
-    const lon = farm.gisData?.center?.lng;
-
-    const result = await weatherAgent.run({
-      location: farm.location,
-      lat,
-      lon,
-      cropType: farm.primaryCrop,
-      soilType: farm.soilType,
-      farmSize: farm.farmSize,
-      irrigationType: farm.irrigationType,
-    });
-
-    return res.json({
-      success: true,
-      farm: {
-        _id: farm._id,
-        farmName: farm.farmName,
-        location: farm.location,
-        soilType: farm.soilType,
-        primaryCrop: farm.primaryCrop,
-        farmSize: farm.farmSize,
-        irrigationType: farm.irrigationType,
-        hasBoundary: Boolean(farm.boundary && farm.boundary.coordinates),
-        gisData: farm.gisData,
-      },
-      ...result,
-    });
+    const result = await weatherAgent.run({ location, cropType, farm });
+    return res.json({ success: true, farm, ...result });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
 });
+
 
 router.post('/soil', async (req, res) => {
   try {

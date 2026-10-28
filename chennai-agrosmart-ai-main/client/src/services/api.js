@@ -60,6 +60,9 @@ export const farmApi = {
   createFarm: (data) => api.post('/farms', data),
   getFarmById: (id) => api.get(`/farms/${id}`),
   updateFarm: (id, data) => api.put(`/farms/${id}`, data),
+  saveBoundary: (id, data) => api.post(`/farms/${id}/boundary`, data),
+  deleteBoundary: (id) => api.delete(`/farms/${id}/boundary`),
+  getFarmWeather: (id) => api.get(`/farms/${id}/weather`),
 };
 
 // Crop Analysis & Multi-Agent Pipeline endpoints
@@ -80,6 +83,15 @@ export const analysisApi = {
   getAnalysisById: (id) => api.get(`/analysis/${id}`),
 };
 
+// Multi-Agent Decision Engine & Weather Telemetry endpoints
+export const agentApi = {
+  getWeather: (data) => api.post('/agents/weather', data),
+  getFarmWeather: (farmId) => api.get(`/agents/weather/farm/${farmId}`),
+  getCrop: (data) => api.post('/agents/crop', data),
+  getSoil: (data) => api.post('/agents/soil', data),
+  getMarket: (data) => api.post('/agents/market', data),
+};
+
 // Profile endpoints
 export const profileApi = {
   getProfile: () => api.get('/profile'),
@@ -87,3 +99,4 @@ export const profileApi = {
 };
 
 export default api;
+

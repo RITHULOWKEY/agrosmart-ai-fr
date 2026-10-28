@@ -38,51 +38,32 @@ const farmSchema = new mongoose.Schema(
       enum: ['Drip', 'Sprinkler', 'Flood', 'Rainfed', 'Manual'],
       default: 'Drip',
     },
-    // Feature 1: GIS Smart Farm Mapping fields
-    boundary: {
+    gisData: {
       type: {
         type: String,
-        enum: ['Polygon'],
         default: 'Polygon',
       },
       coordinates: {
-        type: [[[Number]]], // GeoJSON format: [[[lng, lat], [lng, lat], ...]]
+        type: mongoose.Schema.Types.Mixed,
         default: undefined,
       },
-    },
-    gisData: {
-      areaSqMeters: {
-        type: Number,
-        default: 0,
-      },
-      areaAcres: {
-        type: Number,
-        default: 0,
-      },
-      areaHectares: {
-        type: Number,
-        default: 0,
-      },
-      perimeterMeters: {
-        type: Number,
-        default: 0,
-      },
+      areaSqMeters: { type: Number, default: 0 },
+      areaAcres: { type: Number, default: 0 },
+      areaHectares: { type: Number, default: 0 },
+      perimeterMeters: { type: Number, default: 0 },
+      vertexCount: { type: Number, default: 0 },
       center: {
         lat: { type: Number },
         lng: { type: Number },
       },
-      lastSurveyedAt: {
-        type: Date,
-      },
-      notes: {
-        type: String,
-        trim: true,
-      },
+      notes: { type: String, default: '' },
+      updatedAt: { type: Date },
     },
   },
   {
     timestamps: true,
   }
+
 );
 
 farmSchema.index({ userId: 1, createdAt: -1 });
